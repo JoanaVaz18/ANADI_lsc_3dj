@@ -271,3 +271,90 @@ kruskal.test(dados_numericos,grupos)
 #como pvalue = 0,3335 > 0.05 nao rejeita-se H0 nao ha diferencas significativas entre as precisoes de algoritmos
 
 ##c como pvalue = 0,3335 > 0.05 nao rejeita-se H0 nao ha diferencas significativas entre as precisoes de algoritmos
+
+
+#3 O ficheiro DADOS3.csv contém dados de 4 variáveis (aceleração, número de cilindros, peso e
+#potência) de 99 viaturas escolhidas aleatoriamente:
+
+
+#a Divida as 99 viaturas em três grupos: viaturas com 4 cilindros, com 6 e com 8. Existirá diferenças
+#significativas na aceleração entre os três grupos?
+
+
+dados3 <- read.csv("DADOS3.csv")
+View(dados3)
+
+
+aceleracao <- dados3$Acceleration
+cilindros <- dados3$Cylinders
+
+
+aceleracao_4c <- aceleracao[cilindros == 4]
+length(aceleracao_4c)  #lilith
+aceleracao_6c <- aceleracao[cilindros == 6]
+length(aceleracao_6c)  #shapiro test
+aceleracao_8c <- aceleracao[cilindros == 8]
+length(aceleracao_8c)  #lilith
+
+
+Shap_t <- shapiro.test(aceleracao_6c)
+Shap_t$p.value
+
+#rejeita h0 not normal
+
+Lill_t <- lillie.test(aceleracao_4c)
+Lill_t$p.value
+ 
+#nao se rejeita h0
+
+Lill_t <- lillie.test(aceleracao_8c)
+Lill_t$p.value
+
+#nao se rejeita h0
+
+
+
+dados_numericos <-c(aceleracao_4c,aceleracao_6c,aceleracao_8c)
+
+
+grupos <- factor (c(rep("4",51),rep("6",17),rep ("8",31)))
+
+kruskal.test(dados_numericos,grupos)
+
+
+
+#bSupondo que a aceleração é a variável dependente e as restantes variáveis são independentes:
+#i Encontre o modelo de regressão linear. N.B. considere a variável número de cilindros uma
+#variável “Dummy”.
+
+#y acele x1 weight horse factor cylin
+
+
+colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower")
+
+dados3$Cylinders <- factor(dados3$Cylinders)
+
+reg3 <- lm(dados3$Acceleration ~ dados3$Weight + dados3$Horsepower + dados3$Cylinders)
+
+reg3
+
+summary(reg3)
+
+
+#ii Use o modelo encontrado na alínea anterior para estimar a aceleração de uma viatura com:
+#um peso de 2950 kg, potência de 100 Hp e 4 cilindros.
+
+peso <- 2950
+potencia <- 100
+num_cilindros <- "4" # Note que estamos usando a string "4" como valor para a variável categórica num_cilindros
+
+# Criar um novo data frame com os valores das variáveis independentes
+nova_viatura <- data.frame(Cylinders = num_cilindros, Weight = peso , Hosepower = potencia)
+
+estimativa_aceleracao <- predict(reg3, nova_viatura)
+
+print(estimativa_aceleracao)
+
+
+plot (fitted(reg3), residuals(reg3), xlab="Val. Ajustados", ylab="Residuos")
+abline(h=0)
