@@ -365,12 +365,12 @@ kruskal.test(dados_numericos,grupos)
 ##variável “Dummy”.
 
 
-#y= acele x1= weight x2= horse  x3=factor x4=cylin
+#y= acele x1= cylin x2= weight  x3=power 
 
-colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower")
+colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower") 
 dados3$Cylinders <- factor(dados3$Cylinders)
 
-reg3 <- lm(dados3$Acceleration ~  dados3$Weight + dados3$Horsepower + dados3$Cylinders )
+reg3 <- lm(dados3$Acceleration ~  dados3$Cylinders +dados3$Weight + dados3$Horsepower  )
 reg3
 
 summary(reg3)
