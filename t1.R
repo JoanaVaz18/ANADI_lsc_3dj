@@ -66,11 +66,9 @@ boxplot(dados1c,main="Temperatura do motor nas bombas no dia 2013-08-04",xlab="B
 dados1di <- subset(dados1, format(TEMPO_POSIX, "%Y-%m") == "2014-03")
 View(dados1di)
 
-total_barris1 <- aggregate(dados1di$bbl.d.2, list(format(dados1di$TEMPO_POSIX, "%j")), sum)
-total_barris2 <- aggregate(dados1di$bbl.d.5, list(format(dados1di$TEMPO_POSIX, "%j")), sum)
+total_barris1 <- aggregate(dados1di$bbl.d.2, list(format(dados1di$TEMPO_POSIX, "%j")), mean)
+total_barris2 <- aggregate(dados1di$bbl.d.5, list(format(dados1di$TEMPO_POSIX, "%j")), mean)
 
-bomba1 <- unlist(mediasb1)
-bomba2 <- unlist(mediasb2)
 counts <- rbind(total_barris1$x,total_barris2$x)
 
 #boxplot
@@ -87,12 +85,12 @@ bomba1 <- subset(dados1, as.Date(TEMPO_POSIX) >= as.Date("2013-06-01") & as.Date
 View(bomba1)
 
 #agrega dados da bomba1 fazendo soma do oil rate para cada mes(%m)
-total_barris <- aggregate(bomba1$bbl.d.2, list(format(bomba1$TEMPO_POSIX, "%m")), sum)
+total_barris <- aggregate(bomba1$bbl.d.2, list(format(bomba1$TEMPO_POSIX, "%m")), mean)
+total_barris <- total_barris$x*30
 
-#procura o mes com maior producao, apresentatando no final o mes(1-12 onde 1 representa mes 06/13 e 12 o mes 05/14)
-mes_maior <- total_barris[which.max(total_barris$x), 1]
-#mes_maior=3 significa que mes 08/13 foi o mes com maior producao
-
+#procura o mes com maior producao, apresentatando no final o mes(1-12 onde 1 representa mes 1/14 e 12 o mes 12/13)
+mes_maior <-which.max(total_barris)
+#mes_maior=8 significa que mes 08/13 foi o mes com maior producao
 
 ##iii Extraiu-se uma amostra aleatória de dias entre os dias 1-6-2013 e 31-5-2014 usando as
 ##seguintes instruções
@@ -120,15 +118,15 @@ dadosD4 <- subset(dados1,as.Date(TEMPO_POSIX) == as.Date(datas_amostra) ,origin=
 View(dadosD4)
 
 #calcula total de barris para cada bomba para cada dia
-total_barris1 <- aggregate(dadosD4$bbl.d.2, list(format(dadosD4$TEMPO_POSIX, "%j")), sum)
-total_barris2 <- aggregate(dadosD4$bbl.d.5, list(format(dadosD4$TEMPO_POSIX, "%j")), sum)
+total_barris1 <- aggregate(dadosD4$bbl.d.2, list(format(dadosD4$TEMPO_POSIX, "%j")), mean)
+total_barris2 <- aggregate(dadosD4$bbl.d.5, list(format(dadosD4$TEMPO_POSIX, "%j")), mean)
 
 classes=c("total_barris1","total_barris2")
 # Boxplot para a produção da Bomba 1 e 2
 boxplot(total_barris1$x,total_barris2$x,
         main = "Produção diária da Bomba 1 e bomba2 (amostra aleatória)",
         ylab = "Barris produzidos",
-        ylim = c(0, max(total_barris1$x)),
+        ylim = c(300, 700),
         names=classes,
         col=c(4,2))
 
@@ -150,15 +148,40 @@ library(BSDA)
 #H1:nao segue normalidade
 Shap_t <- shapiro.test(total_barris2$x)
 Shap_t$p.value
-#sendo p=0.00102 < alfa de 0,05 entao rejeita-se H0 e logo nao tem dist normal
-
+#sendo p=0.394946 > alfa de 0,05 entao nao se rejeita H0 logo tem dist normal
+Shap_t <- shapiro.test(total_barris1$x)
+Shap_t$p.value
+#sendo p=0.979781 > alfa de 0,05 entao nao se rejeita H0 logo tem dist normal
 
 ##t.test(total_barris1$x, total_barris2$x, paired=TRUE, var=TRUE,alternative="greater")
 
 diff_bomba <- total_barris1$x - total_barris2$x
 
+library(car)
+dados <- as.data.frame(cbind(total_barris1$x,total_barris2$x))
+
+library(reshape2) #para usar função melt
+Mdados <- melt(dados , variable.name = "Bomba", value.name = "Producao")
+View(Mdados)
+
+#levene verifica se as variancias sao iguais
+#H0:iguais
+#H1:diferentes
+result <- leveneTest(Producao~Bomba,Mdados,center=mean)
+#como pvalue=0.01919 < alfa=0.05, logo rejeita-se H0, ou seja consideramos as variancas diferentes
+
+# Hipoteses:  h0 meanBomba1 = meanBomba2
+#             h1 meanBomba1 > meanBomba2
+t.test(total_barris1$x, total_barris2$x,mu=0, paired=TRUE, var.equal=FALSE,alternative="greater")
+#p value= 9.841e-05< alfa de 0.05, rejeitamos assim H0.Ha evidencia de que bomba1 teve media de producao diaria superior a bomba 2 de ordem significativa
+
+
+
+
+#hist(diff_bomba)
+
 #skewness verifica se tem simetria
-skewness(diff_bomba)
+#skewness(diff_bomba)
 
 # value= 1.664474 > 1 logo nao e simetrico
 
@@ -166,8 +189,8 @@ skewness(diff_bomba)
 # Hipoteses:  h0 dif_bomba =0
 #             h1 dif_bomba >0
 #teste de sinal uma vez que as amostras nao tem dist normal nem sao simetricos
-signt <- SIGN.test(diff_bomba,md=0,alternative = "greater") 
-signt$p.value
+#signt <- SIGN.test(diff_bomba,md=0,alternative = "greater") 
+#signt$p.value
 #p value= 0.00195< alfa de 0.05, rejeitamos assim H0.Ha evidencia de que bomba1 teve media de producao diaria superior a bomba 2 de ordem significativa
 
 
@@ -207,6 +230,12 @@ rcorr(as.matrix(dados2[3:8]),type="pearson")
 #ML  0.71 0.62 0.85 0.57 1.00 0.72
 #GB  0.86 0.21 0.75 0.32 0.72 1.00
 
+# Positivamente fortemente correlacionadas: (C>0.7)     
+# Negativamente fortemente correlacionadas: (C<-0.7)
+# Fracamente correlacionadas: (-0.3<C<0.3) 
+# Positivamente moderadamente correlacionadas:(0.3<C<0.7)   
+# Negativamente moderadamente correlacionadas:(-0.3>C>-0.7)
+
 #P
       #SVM    DT     KN     RF     ML     GB    
 #SVM        0.4646 0.0474 0.1747 0.0211 0.0013
@@ -216,11 +245,6 @@ rcorr(as.matrix(dados2[3:8]),type="pearson")
 #ML  0.0211 0.0535 0.0017 0.0841        0.0186
 #GB  0.0013 0.5552 0.0124 0.3610 0.0186    
 
-# Positivamente fortemente correlacionadas: (C>0.7)     
-# Negativamente fortemente correlacionadas: (C<-0.7)
-# Fracamente correlacionadas: (-0.3<C<0.3) 
-# Positivamente moderadamente correlacionadas:(0.3<C<0.7)   
-# Negativamente moderadamente correlacionadas:(-0.3>C>-0.7)
 
 #cor SVM/ML é forte(0.71) (positiva e proxima de 1 e significativa p(0.0211)<alfa(0.05))
 #cor SVM/GB é forte(0.86) (positiva e proxima de 1 e significativa p(0.0013)<alfa(0.05))
@@ -230,7 +254,7 @@ rcorr(as.matrix(dados2[3:8]),type="pearson")
 #cor ML/GB é forte(0.72) (positiva e proxima de 1 e significativa p(0.0186)<alfa(0.05))
 
 #cor SVM/DT é fraca(0.26) (positiva e proxima de 0 e nao significativa p(0.4646)>alfa(0.05))
-#cor SVM/DT é fraca(0.21) (positiva e proxima de 0 e nao significativa p(0.5552)>alfa(0.05))
+#cor GB,/DT é fraca(0.21) (positiva e proxima de 0 e nao significativa p(0.5552)>alfa(0.05))
 
 #cor SVM/KN é moderada(0.64) (positiva entre 0.3 e 0.7 e significativa p(0.0474)<alfa(0.05))
 #cor DT/ML é moderada(0.62) (positiva entre 0.3 e 0.7 e nao significativa p(0.0535)>alfa(0.05))
@@ -346,7 +370,7 @@ kruskal.test(dados_numericos,grupos)
 colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower")
 dados3$Cylinders <- factor(dados3$Cylinders)
 
-reg3 <- lm(dados3$Acceleration ~ dados3$Cylinders + dados3$Weight + dados3$Horsepower)
+reg3 <- lm(dados3$Acceleration ~  dados3$Weight + dados3$Horsepower + dados3$Cylinders )
 reg3
 
 summary(reg3)
@@ -376,4 +400,7 @@ print(estimativa_aceleracao)
 
 plot (fitted(reg3), residuals(reg3), xlab="Val. Ajustados", ylab="Residuos")
 abline(h=0)
+
+
+
 
