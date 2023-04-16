@@ -196,6 +196,16 @@ t.test(total_barris1$x, total_barris2$x,mu=0, paired=TRUE, var.equal=FALSE,alter
 
 ##v Confirme se a decisão obtida no teste da alínea anterior corresponde à “realidade”.
 
+total_barris1 <- aggregate(dados1$bbl.d.2, list(format(dados1$TEMPO_POSIX, "%m")), mean)
+total_barris2 <- aggregate(dados1$bbl.d.5, list(format(dados1$TEMPO_POSIX, "%m")), mean)
+
+counts <- rbind(total_barris1$x,total_barris2$x)
+
+#boxplot
+barplot(counts, main="ddl diario de cada mes(2013-6 2014-5)",ylab= "Numero de barris",
+        xlab="mes", col=c("darkblue","red"),beside=TRUE)
+
+
 #confirma-se
 
 
@@ -365,12 +375,12 @@ kruskal.test(dados_numericos,grupos)
 ##variável “Dummy”.
 
 
-#y= acele x1= cylin x2= weight  x3=power 
+#y= acele x1= weight x2= horse  x3=factor x4=cylin
 
-colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower") 
+colnames(dados3) <- c("Acceleration","Cylinders","Weight","Horsepower")
 dados3$Cylinders <- factor(dados3$Cylinders)
 
-reg3 <- lm(dados3$Acceleration ~  dados3$Cylinders +dados3$Weight + dados3$Horsepower  )
+reg3 <- lm(dados3$Acceleration ~  dados3$Weight + dados3$Horsepower + dados3$Cylinders )
 reg3
 
 summary(reg3)
