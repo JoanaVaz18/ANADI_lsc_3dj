@@ -44,33 +44,25 @@ dataset <- dataset[,-1]
 dataset <- dataset[,-2] 
 dataset <- dataset[,-8] 
 
-# Specify the column names for which you want to create a model matrix
+# colunas em binario
 columns <- c("Background", "Continent")
 
-# Initialize an empty list to store the model matrices
-model_matrices <- list()
+matriz_binaria <- list()
 
-# Iterate through each column in the dataset
 for (col in columns) {
-  # Create the model matrix for the current column
   data_matrix <- model.matrix(~ . - 1, data = dataset[col])
-  
-  # Add the model matrix to the list
-  model_matrices[[col]] <- data_matrix
+  matriz_binaria[[col]] <- data_matrix
 }
 
-# Combine all the model matrices into a single dataframe
-data_bin <- do.call(cbind, model_matrices)
+data_bin <- do.call(cbind, matriz_binaria)
 
-# Specify the columns to bind with data_bin
 columns_to_bind <- c("vo2_results", "hr_results", "altitude_results", "Age", "Pro.level", "gender", "Winter.Training.Camp")
 
-# Select the columns from the dataset
 additional_data <- dataset[columns_to_bind]
 
-# Bind the additional columns with data_bin
 dataset <- cbind(data_bin, additional_data)
 
+# Transforma colunas Dummy em 1 e 2
 dataset$Pro.level <- as.numeric(as.factor(dataset$Pro.level))
 dataset$gender <- as.numeric(as.factor(dataset$gender))
 dataset$Winter.Training.Camp <- as.numeric(as.factor(dataset$Winter.Training.Camp))
