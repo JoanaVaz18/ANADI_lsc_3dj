@@ -33,30 +33,47 @@ dados <- dados %>%
 #A
 missing_values <- sum(is.na(dados))
 dataset <- na.omit(dados)
-dataset$gender <- as.numeric(factor(dados$gender))
-dataset$Background <- as.numeric(factor(dados$Background))
-dataset$Pro.level <- as.numeric(factor(dados$Pro.level))
-dataset$Winter.Training.Camp <- as.numeric(factor(dados$Winter.Training.Camp))
-dataset$Continent <- as.numeric(factor(dados$Continent))
 
-#B
+dados <- dados %>%
+  mutate(Age = as.integer(Sys.Date() - dob) %/% 365)
 
-boxplot(dataset[,c("vo2_results","hr_results","altitude_results")])
+missing_values <- sum(is.na(dados))
+dataset <- na.omit(dados)
 
-# Get outliers for vo2_results
-outliers_vo2 <- boxplot(dataset$vo2_results)$out
-
-# Get outliers for hr_results
-outliers_hr <- boxplot(dataset$hr_results)$out
-
-# Get outliers for altitude_results
-outliers_altitude <- boxplot(dataset$altitude_results)$out
-
-
-#C
 dataset <- dataset[,-1]
 dataset <- dataset[,-2] 
 dataset <- dataset[,-8] 
+
+# Specify the column names for which you want to create a model matrix
+columns <- c("Background", "Continent")
+
+# Initialize an empty list to store the model matrices
+model_matrices <- list()
+
+# Iterate through each column in the dataset
+for (col in columns) {
+  # Create the model matrix for the current column
+  data_matrix <- model.matrix(~ . - 1, data = dataset[col])
+  
+  # Add the model matrix to the list
+  model_matrices[[col]] <- data_matrix
+}
+
+# Combine all the model matrices into a single dataframe
+data_bin <- do.call(cbind, model_matrices)
+
+# Specify the columns to bind with data_bin
+columns_to_bind <- c("vo2_results", "hr_results", "altitude_results", "Age", "Pro.level", "gender", "Winter.Training.Camp")
+
+# Select the columns from the dataset
+additional_data <- dataset[columns_to_bind]
+
+# Bind the additional columns with data_bin
+dataset <- cbind(data_bin, additional_data)
+
+dataset$Pro.level <- as.numeric(as.factor(dataset$Pro.level))
+dataset$gender <- as.numeric(as.factor(dataset$gender))
+dataset$Winter.Training.Camp <- as.numeric(as.factor(dataset$Winter.Training.Camp))
 
 #D
 # Denormalize the predicted values
@@ -69,226 +86,80 @@ min_max_normalize <- function(x) {
 
 
 
+
+######################################################
+
 #4.2
 
-#EX1
-
-#NN
-
-
+set.seed(42)
+train_indices <- sample(c(TRUE, FALSE), nrow(dataset), replace=TRUE, prob=c(0.7,0.3))
 normalized_dataset <- as.data.frame(lapply(dataset, min_max_normalize))
+
+train_data <- dataset[train_indices, ]
+test_data <- dataset[-train_indices, ]
+
 sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
-train_data  <- normalized_dataset[sample, ]
-test_data  <- normalized_dataset[!sample, ]
+norm_train_data  <- normalized_dataset[sample, ]
+norm_test_data  <- normalized_dataset[!sample, ]
 
-nn.model <- neuralnet(Pro.level ~ ., data = train_data, hidden = numnodes <- 5)
-
-#plot(nn.model)
-
-nn.pred <- compute(nn.model,test_data)
-
-denormalized_pred <- minmaxdesnorm(nn.pred$net.result,dataset$Pro.level)
-
-# Denormalizar
-denormalized_actual <- minmaxdesnorm(test_data$Pro.level,dataset$Pro.level)
-
-cfmatrix2 <- table(denormalized_pred, denormalized_actual )
-nn_accuracy <- sum(diag(cfmatrix2)) / sum(cfmatrix2) * 100
-
-
-# Arvore
-
-# Criando o modelo de árvore de decisão
-decision_tree <- rpart(Pro.level ~ ., data = train_data, method = "class")
-
-# Visualizando a árvore de decisão
-#plot(decision_tree)
-#text(decision_tree)
-
-# Fazendo previsões no conjunto de teste
-tree_predict <- predict(decision_tree, newdata = test_data, type = "class")
-
-# Avaliando o desempenho do modelo
-
-cfmatrix <- table(tree_predict, test_data$Pro.level)
-tree_accuracy <- sum(diag(cfmatrix)) / sum(cfmatrix) * 100
-
-
-##K
-knn_model <- knn(train = train_data[, -ncol(train_data)],
-                 test = test_data[, -ncol(test_data)],
-                 cl = train_data$Pro.level,
-                 k = 5)
-
-#Make predictions on the test data
-knn_predict <- as.factor(knn_model)
-
-
-cfmatrix3 <- table(knn_predict, test_data$Pro.level)
-knn_accuracy <- sum(diag(cfmatrix3)) / sum(cfmatrix3) * 100
-
-tree_accuracy
-nn_accuracy
-knn_accuracy
-
-# EX1.a)
-
-# Numero de folds
-k <- 10  
-# dois melhores modelos: Arvore e Kn
-tree_accuracy <- numeric(k)
-knn_accuracy <- numeric(k)
-
-#set.seed(123) # se necessario
-
-# Gera indices aleatorios para o cross-validation
-indices <- sample(1:k, nrow(dataset), replace = TRUE)  
-
-# k-folds
-for (i in 1:k) {
-  # Divide amostra em train/test para cada fold
-  train_data <- dataset[indices != i, ]
-  test_data <- dataset[indices == i, ]
-  
-  # Treina o modelo Arvore Decisao
-  tree_model <- rpart(Pro.level ~ ., data = train_data, method = "class")
-  
-  # Treina o modelo K-vizinhos
-  knn_model <- knn(train = train_data[, -ncol(train_data)],
-                   test = test_data[, -ncol(test_data)],
-                   cl = train_data$Pro.level,
-                   k = 5)
-  
-  # Calcula Accuracy
-  tree_predictions <- predict(tree_model, newdata = test_data, type = "class")
-  knn_predictions <- knn_model
-  
-  tree_accuracy[i] <- mean(tree_predictions == test_data$Pro.level)
-  knn_accuracy[i] <- mean(knn_predictions == test_data$Pro.level)
+tree_accuracy_funct <- function(train_data, test_data, column_name) {
+  decision_tree <- rpart(paste(column_name, "~ ."), data = train_data, method = "class")
+  tree_predict <- predict(decision_tree, newdata = test_data, type = "class")
+  cfmatrix <- table(tree_predict, test_data[[column_name]])
+  return(sum(diag(cfmatrix)) / sum(cfmatrix) * 100) 
 }
 
-tree_mean <- mean(tree_accuracy)
-tree_sd <- sd(tree_accuracy)
+knn_accuracy_func <- function(train_data, test_data, column_name, neighbors) {
+  knn_model <- knn(train = train_data[, -ncol(train_data)],
+                   test = test_data[, -ncol(test_data)],
+                   cl = train_data[[column_name]],
+                   k = neighbors)
+  knn_predict <- as.factor(knn_model)
+  cfmatrix <- table(knn_predict, test_data[[column_name]])
+  return(sum(diag(cfmatrix)) / sum(cfmatrix) * 100)
+}
 
-knn_mean <- mean(knn_accuracy)
-knn_sd <- sd(knn_accuracy)
+nn_accuracy_func <- function(train_data, test_data, column, nodes) {
+  nn.data <- train_data
+  nn.data$target <- train_data[, column]  # Create a new column "target" for the target variable
+  
+  nn.model <- neuralnet(target ~ ., data = nn.data, hidden = numnodes <- nodes)
+  
+  nn.pred <- compute(nn.model, test_data)
+  
+  denormalized_pred <- minmaxdesnorm(nn.pred$net.result, train_data[, column])
+  denormalized_actual <- minmaxdesnorm(test_data[, column], train_data[, column])
+  
+  cfmatrix <- table(denormalized_pred, denormalized_actual)
+  return(sum(diag(cfmatrix)) / sum(cfmatrix) * 100)
+}
 
-# Media Arvore = 0.6744161
-# Desvio Arvore = 0.05291416
-# Media Knn = 0.672229
-# Desvio Knn = 0.02810806
-# Ambos os modelos têm uma média de precisão em torno de 67% e desvio padrão baixo
-# O que indica consistência dos resultados ao longo das k-folds
-# E apresentam um desempenho semelhante no calculo da previsao do "Pro.level"
+normalize <- function(data) {
+  centered <- scale(data, center = TRUE, scale = FALSE)  # Center the data
+  normalized <- scale(centered, center = FALSE, scale = TRUE)  # Scale the data
+  return(normalized)
+}
 
-# EX1.b
+column_name <- "Pro.level"
 
-# Lazy Learning -> K-vizinhis mais proximos (Knn)
-# Porque armazena todos os dados de treino na fase de treinamento
-# e apenas os processo na fase de classificação
-# - Simple e facil de implementar
-# - Pode implicar um grande espaço de armazenamento para guardar todos os dados de treino
-# - Pode exigir um processamento longo e computacionalmente intensivo, já que o modelo calcula as distâncias do dados
-# de treino e de teste na fase de classificação
-# - Considera todos os dados, incluindo os irrelevantes ou com erros, o que pode prejudicar a previsão
-# - o valor k é necessário ser escolhido adequadamente, valor muito altopode causar perda de precisão enquanto que um
-# valor baixo pode causar instabilidade nos dados
-# - Conjunto de dados de altas dimensões -> Maldição da Dimensão
+tree_accuracy <- tree_accuracy_funct(train_data, test_data, column_name)
 
-
-# EX1.c
-
-# Teste de Shapiro-Wilk para o primeiro conjunto de dados (tree_accuracy)
-shapiro.test(tree_accuracy)
-# p-value = 0.5843 > alfa
-# segue distribuição normal
-
-# Teste de Shapiro-Wilk para o segundo conjunto de dados (knn_accuracy)
-shapiro.test(knn_accuracy)
-# p-value = 0.9185 > alfa
-# segue distribuição normal
-
-# Teste Parametrico
-t.test(tree_accuracy, knn_accuracy, paired = T)
-# p-value > alfa=0.05
-# diferença não significativa
+k_neighbors <- 5
+knn_accuracy <- knn_accuracy_func(train_data, test_data, column_name, k_neighbors)
 
 
-# EX1.d
+tree_accuracy_norm <- tree_accuracy_funct(norm_train_data, norm_test_data, column_name)
 
-#Compare os resultados dos modelos. Discuta em detalhe qual o modelo que
-#apresentou melhor e pior desempenho de acordo com os critérios: Accuracy;
-#Sensitivity; Specificity e F1.
+k_neighbors <- 5
+knn_accuracy_norm <- knn_accuracy_func(norm_train_data, norm_test_data, column_name, k_neighbors)
 
-# Arvore
-
-# Criando o modelo de árvore de decisão
-decision_tree <- rpart(Pro.level ~ ., data = train_data, method = "class")
-
-# Modelo de Árvore de Decisão
-tree_predictions <- predict(decision_tree, newdata = test_data, type = "class")
-tree_cfmatrix <- table(tree_predictions, test_data$Pro.level)
-
-# Calcular métricas para Árvore de Decisão
-tree_accuracy <- sum(diag(tree_cfmatrix)) / sum(tree_cfmatrix)  # Accuracy
-tree_sensitivity <- tree_cfmatrix[2, 2] / sum(tree_cfmatrix[2, ])  # Sensitivity
-tree_specificity <- tree_cfmatrix[1, 1] / sum(tree_cfmatrix[1, ])  # Specificity
-tree_f1 <- 2 * tree_sensitivity * tree_specificity / (tree_sensitivity + tree_specificity)  # F1 score
+nodes <- 5
+nn_accuracy_norm <- nn_accuracy_func(norm_train_data, norm_test_data, column_name, nodes)
 
 
-# Imprimir resultados
-cat("Árvore de Decisão:\n")
-cat("Accuracy:", tree_accuracy, "\n")
-cat("Sensitivity:", tree_sensitivity, "\n")
-cat("Specificity:", tree_specificity, "\n")
-cat("F1 score:", tree_f1, "\n\n")
 
-
-##K
-knn_model <- knn(train = train_data[, -ncol(train_data)],
-                 test = test_data[, -ncol(test_data)],
-                 cl = train_data$Pro.level,
-                 k = 5)
-
-knn_predictions <- as.factor(knn_model)
-knn_cfmatrix <- table(knn_predictions, test_data$Pro.level)
-
-# Calcular métricas para k-NN
-knn_accuracy <- sum(diag(knn_cfmatrix)) / sum(knn_cfmatrix)  # Accuracy
-knn_sensitivity <- knn_cfmatrix[2, 2] / sum(knn_cfmatrix[2, ])  # Sensitivity
-knn_specificity <- knn_cfmatrix[1, 1] / sum(knn_cfmatrix[1, ])  # Specificity
-knn_f1 <- 2 * knn_sensitivity * knn_specificity / (knn_sensitivity + knn_specificity)  # F1 score
-
-# Imprimir resultados
-cat("k-NN:\n")
-cat("Accuracy:", knn_accuracy, "\n")
-cat("Sensitivity:", knn_sensitivity, "\n")
-cat("Specificity:", knn_specificity, "\n")
-cat("F1 score:", knn_f1, "\n")
-
-# Modelo de Rede Neural
-
-nn.model <- neuralnet(Pro.level ~ ., data = train_data, hidden = numnodes <- 5)
-
-#plot(nn.model)
-
-nn.pred <- compute(nn.model,test_data)
-
-denormalized_pred <- minmaxdesnorm(nn.pred$net.result,dataset$Pro.level)
-
-# Denormalizar
-denormalized_actual <- minmaxdesnorm(test_data$Pro.level,dataset$Pro.level)
-
-nn_cfmatrix <- table(denormalized_pred, denormalized_actual )
-
-# Calcular métricas para Rede Neural
-nn_accuracy <- sum(diag(nn_cfmatrix)) / sum(nn_cfmatrix)  # Accuracy
-nn_sensitivity <- nn_cfmatrix[2, 2] / sum(nn_cfmatrix[2, ])  # Sensitivity
-nn_specificity <- nn_cfmatrix[1, 1] / sum(nn_cfmatrix[1, ])  # Specificity
-nn_f1 <- 2 * nn_sensitivity * nn_specificity / (nn_sensitivity + nn_specificity)  # F1 score
-
-cat("Rede Neural:\n")
-cat("Accuracy:", nn_accuracy, "\n")
-cat("Sensitivity:", nn_sensitivity, "\n")
-cat("Specificity:", nn_specificity, "\n")
-cat("F1 score:", nn_f1, "\n")
+tree_accuracy
+tree_accuracy_norm
+knn_accuracy
+nn_accuracy_norm
+knn_accuracy_norm
