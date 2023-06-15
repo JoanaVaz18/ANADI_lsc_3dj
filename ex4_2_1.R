@@ -1,14 +1,102 @@
+library(dplyr)
+library(ggplot2)
+library(rpart)
+library(corrplot)
+library(rpart.plot)
+library(neuralnet)
+library(nortest)
+library(moments)
+library(car)
+library(FNN)
+library(class)
+library(plyr)
+set.seed(42)
+#EX1
+
+#get current directory
+getwd()
+#set current working directory to a Desktop directory
+setwd("C:/Users/rocha/Downloads/ANADI/tp2_2022/")
+
+# Carregar o arquivo "ciclismo.csv"
+dados <- read.csv("ciclismo.csv",stringsAsFactors=TRUE)
+
+#EX2
+
+dados$dob <- as.Date(dados$dob)
+
+# Calcular a idade com base na data de nascimento
+dados <- dados %>%
+  mutate(Age = as.integer(Sys.Date() - dob) %/% 365)
+# EX4
+
+#A
+missing_values <- sum(is.na(dados))
+dataset <- na.omit(dados)
+dataset$gender <- as.numeric(factor(dados$gender))
+dataset$Background <- as.numeric(factor(dados$Background))
+dataset$Pro.level <- as.numeric(factor(dados$Pro.level))
+dataset$Winter.Training.Camp <- as.numeric(factor(dados$Winter.Training.Camp))
+dataset$Continent <- as.numeric(factor(dados$Continent))
+
+#B
+
+boxplot(dataset[,c("vo2_results","hr_results","altitude_results")])
+
+# Get outliers for vo2_results
+outliers_vo2 <- boxplot(dataset$vo2_results)$out
+
+# Get outliers for hr_results
+outliers_hr <- boxplot(dataset$hr_results)$out
+
+# Get outliers for altitude_results
+outliers_altitude <- boxplot(dataset$altitude_results)$out
+
+
+#C
+dataset <- dataset[,-1]
+dataset <- dataset[,-2] 
+dataset <- dataset[,-8] 
+
+#D
+# Denormalize the predicted values
+minmaxdesnorm <- function(x,goal.attrib) {
+  return (x*(max(goal.attrib)-min(goal.attrib))+min(goal.attrib))
+}
+min_max_normalize <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
+
 
 #4.2
 
 #EX1
+
+#NN
+
+
+normalized_dataset <- as.data.frame(lapply(dataset, min_max_normalize))
+sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
+train_data  <- normalized_dataset[sample, ]
+test_data  <- normalized_dataset[!sample, ]
+
+nn.model <- neuralnet(Pro.level ~ ., data = train_data, hidden = numnodes <- 5)
+
+#plot(nn.model)
+
+nn.pred <- compute(nn.model,test_data)
+
+denormalized_pred <- minmaxdesnorm(nn.pred$net.result,dataset$Pro.level)
+
+# Denormalizar
+denormalized_actual <- minmaxdesnorm(test_data$Pro.level,dataset$Pro.level)
+
+cfmatrix2 <- table(denormalized_pred, denormalized_actual )
+nn_accuracy <- sum(diag(cfmatrix2)) / sum(cfmatrix2) * 100
+
+
 # Arvore
-set.seed(123)
-train_indices <- sample(c(TRUE, FALSE), nrow(dataset), replace=TRUE, prob=c(0.7,0.3))
-train_data <- dataset[train_indices, ]
-test_data <- dataset[-train_indices, ]
-
-
 
 # Criando o modelo de árvore de decisão
 decision_tree <- rpart(Pro.level ~ ., data = train_data, method = "class")
@@ -24,28 +112,6 @@ tree_predict <- predict(decision_tree, newdata = test_data, type = "class")
 
 cfmatrix <- table(tree_predict, test_data$Pro.level)
 tree_accuracy <- sum(diag(cfmatrix)) / sum(cfmatrix) * 100
-
-#NN
-
-set.seed(123)
-
-sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
-train_data1  <- normalized_dataset[sample, ]
-test_data1  <- normalized_dataset[!sample, ]
-
-nn.model <- neuralnet(Pro.level ~ ., data = train_data1, hidden = numnodes <- 5)
-
-#plot(nn.model)
-
-nn.pred <- compute(nn.model,test_data1)
-
-denormalized_pred <- minmaxdesnorm(nn.pred$net.result,dataset$Pro.level)
-
-# Denormalizar
-denormalized_actual <- minmaxdesnorm(test_data1$Pro.level,dataset$Pro.level)
-
-cfmatrix2 <- table(denormalized_pred, denormalized_actual )
-nn_accuracy <- sum(diag(cfmatrix2)) / sum(cfmatrix2) * 100
 
 
 ##K
@@ -155,10 +221,6 @@ t.test(tree_accuracy, knn_accuracy, paired = T)
 #Sensitivity; Specificity e F1.
 
 # Arvore
-set.seed(123)
-train_indices <- sample(c(TRUE, FALSE), nrow(dataset), replace=TRUE, prob=c(0.7,0.3))
-train_data <- dataset[train_indices, ]
-test_data <- dataset[-train_indices, ]
 
 # Criando o modelo de árvore de decisão
 decision_tree <- rpart(Pro.level ~ ., data = train_data, method = "class")
@@ -206,22 +268,16 @@ cat("F1 score:", knn_f1, "\n")
 
 # Modelo de Rede Neural
 
-set.seed(123)
-
-sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
-train_data1  <- normalized_dataset[sample, ]
-test_data1  <- normalized_dataset[!sample, ]
-
-nn.model <- neuralnet(Pro.level ~ ., data = train_data1, hidden = numnodes <- 5)
+nn.model <- neuralnet(Pro.level ~ ., data = train_data, hidden = numnodes <- 5)
 
 #plot(nn.model)
 
-nn.pred <- compute(nn.model,test_data1)
+nn.pred <- compute(nn.model,test_data)
 
 denormalized_pred <- minmaxdesnorm(nn.pred$net.result,dataset$Pro.level)
 
 # Denormalizar
-denormalized_actual <- minmaxdesnorm(test_data1$Pro.level,dataset$Pro.level)
+denormalized_actual <- minmaxdesnorm(test_data$Pro.level,dataset$Pro.level)
 
 nn_cfmatrix <- table(denormalized_pred, denormalized_actual )
 
