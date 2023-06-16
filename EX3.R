@@ -8,11 +8,8 @@ minmaxnorm <- function(x) {
 data.norm <- as.data.frame(lapply(dataset, minmaxnorm))
 
 
-RMSE <- function(test, predicted) {
-  sqrt(mean((test - predicted) ^ 2))
-}
 
-
+set.seed(42)
 index <- sample(1:nrow(dataset), 0.7 * nrow(dataset))
 
 data.train <- data.norm[index, -which(names(data.norm) == "gender")]
@@ -47,7 +44,7 @@ plot(resNeigh$k,
        'orangered1',
        'steelblue4'
      ))
-#k=31 rmse=0.4839
+#k=49 rmse=0.492
 #accuracy
 
 k <- c()
@@ -84,7 +81,7 @@ plot(
   )
 )
 
-#k=33 accuracy=0.6366667
+#k=17 accuracy=0.58
 
 
 
@@ -93,22 +90,24 @@ plot(
 set.seed(42)
 index <- sample(1:nrow(data.norm), 0.7 * nrow(data.norm))
 data.train <- data.norm[index,  ]
-data.test <- data.norm[-index, ]
+data.test <- data.norm[-index,  ]
 
+numnodes <- 2
 
-nn.model <- neuralnet(gender ~ ., data = data.train, hidden = numnodes <- 2,stepmax = 1e6 )
+nn.model <- neuralnet(gender ~ ., data = data.train, hidden = numnodes ,stepmax = 1e6 )
 
 #plot(nn.model)
-nn.pred <- compute(nn.model, data.test[, -1])
+nn.pred <- compute(nn.model, data.test[,  -which(names(data.norm) == "gender")])
 
-nn.pred.gender <- minmaxdesnorm(nn.pred$net.result, dataset$gender)
-test.gender  <- minmaxdesnorm(data.test$gender, dataset$gender)
+#nn.pred.gender <- minmaxdesnorm(nn.pred$net.result, dataset$gender)
+#test.gender  <- minmaxdesnorm(data.test$gender, dataset$gender)
 
 #RMSE(nn.pred.gender, test.gender)
+predicted_labels <- ifelse(nn.pred$net.result > 0.5, 1, 0)  # Convert probabilities to class labels
 
-cfmatrix2 <- table(nn.pred.gender, test.gender )
-nn_accuracy <- sum(diag(cfmatrix2)) / sum(cfmatrix2) * 100
-#33%
+cfmatrix2 <- table(predicted_labels,  data.test$gender)
+nn_accuracy <- sum(diag(cfmatrix2) / sum(cfmatrix2)) * 100
+#0.33
 
 #A
 
@@ -119,8 +118,8 @@ folds <- sample(1:cvf, nrow(dataset), replace = TRUE)
 table(folds)
 
 accuracy <- matrix(nrow = cvf, ncol = 2)
-k <- 33
-cv.error <- matrix(nrow = cvf, ncol = 2)
+k <- 17
+other <- matrix(nrow = cvf, ncol = 8)
 
 for (i in 1:cvf){
   
@@ -136,20 +135,22 @@ for (i in 1:cvf){
   knn.pred <- knn(train=train.cv, test=test.cv, cl=train_labels, k) 
   cfmatknn <- table(tst_labels,knn.pred)
   
-  nn.model <- neuralnet(gender ~ ., data = train1.cv, hidden = numnodes <- 2,stepmax = 1e6 )
+  nn.model <- neuralnet(gender ~ ., data = train1.cv, hidden = 2 ,stepmax = 1e6 )
   
   #plot(nn.model)
   nn.pred <- compute(nn.model, test1.cv[, -which(names(data.norm) == "gender")])
   
-  nn.pred.gender <- minmaxdesnorm(nn.pred$net.result, dataset$gender)
-  test1.cv$gender  <- minmaxdesnorm(test1.cv$gender, dataset$gender)
+  predicted_labels <- ifelse(nn.pred$net.result > 0.5, 1, 0)  # Convert probabilities to class labels
   
-  RMSE(nn.pred.gender, test1.cv$gender)
-  
-  cfmatnn <- table(nn.pred.gender,test1.cv$gender)
+  cfmatnn <- table(predicted_labels, test1.cv$gender)
     
   accuracy[i, ] <- c( sum(diag(cfmatknn))/sum(cfmatknn)*100,
                       sum(diag(cfmatnn))/sum(cfmatnn)*100) 
+  
+  knn_results <-  parse_results(cfmatknn)
+  nn_results <- parse_results(cfmatnn)
+  
+  other[i, ] <- c(knn_results$accuracy,knn_results$`recall/sensitivity`,knn_results$precision,knn_results$F1,nn_results$accuracy,nn_results$`recall/sensitivity`,nn_results$precision,nn_results$F1)
   
   
 }
@@ -159,8 +160,11 @@ for (i in 1:cvf){
 apply(accuracy,2,mean)
 apply(accuracy,2,sd)
 
-# Media Knn = 0.7794
-# Desvio Knn = 0.0399
+
+# Media Knn = 55.329%
+# Desvio Knn = 4.147%
+# Media nn = 87.204%
+# Desvio nn = 4.755%
 # Ambos os modelos têm uma média de precisão em torno de 67% e desvio padrão baixo
 # O que indica consistência dos resultados ao longo das k-folds
 # E apresentam um desempenho semelhante no calculo da previsao do "Pro.level"
@@ -170,7 +174,7 @@ apply(accuracy,2,sd)
 # H0: os modelos sÃ£o significativamente iguais 
 # H1: os modelos sÃ£o significativamente diferentes
 
-t.test(accuracy[, 1], accuracy[, 2])  #p-value = 3.849e-12
+t.test(accuracy[, 1], accuracy[, 2])  #p-value = 1.316e-11
 # Como o p-value Ã© inferior a alfa (0.05) rejeitamos a hipÃ³tese nula. 
 # Ou seja, os modelos os modelos sÃ£o significativamente diferentes
 
@@ -196,39 +200,20 @@ parse_results <- function(m.conf) {
     )
   return(my_list)
 }
-##K
 
+# resultados resultantes do ex do k fold
+medidas <- matrix(nrow = 2, ncol = 4)
 
-index <- sample(1:nrow(dataset), 0.7 * nrow(dataset))
+medidas[1,1] <- mean(other[,1])
+medidas[1,2] <- mean(other[,2])
+medidas[1,3] <- mean(other[,3])
+medidas[1,4] <- mean(other[,4])
+medidas[2,1] <- mean(other[,5])
+medidas[2,2] <- mean(other[,6])
+medidas[2,3] <- mean(other[,7])
+medidas[2,4] <- mean(other[,8])
 
-data.train <- data.norm[index, -which(names(data.norm) == "gender")]
-data.test <- data.norm[-index,-which(names(data.norm) == "gender")]
+rownames(medidas) <- c("KNN", "NN")
+colnames(medidas) <- c("Accuracy", "Sensitivity", "Precision", "F1")
 
-train_labels <- data.norm[index,"gender"]
-test_labels <- data.norm[-index,"gender"]
-
-knn.pred <- knn(train=data.train, test=data.test, cl=train_labels, k=33) 
-
-knn_cfmatrix <- table(test_labels,knn.pred)
-
-knn_results <-  parse_results(knn_cfmatrix)
-
-# Modelo de Rede Neural
-
-index <- sample(1:nrow(data.norm), 0.7 * nrow(data.norm))
-data.train <- data.norm[index,  ]
-data.test <- data.norm[-index, ]
-
-nn.model <- neuralnet(gender ~ ., data = data.train, hidden = numnodes <- 2,stepmax = 1e6 )
-
-#plot(nn.model)
-nn.pred <- compute(nn.model, data.test[, -1])
-
-nn.pred.gender <- minmaxdesnorm(nn.pred$net.result, dataset$gender)
-test.gender  <- minmaxdesnorm(data.test$gender, dataset$gender)
-
-RMSE(nn.pred.gender, test.gender)
-
-nn_cfmatrix <- table(nn.pred.gender, test.gender )
-
-nn_results <- parse_results(nn_cfmatrix)
+View(medidas)
