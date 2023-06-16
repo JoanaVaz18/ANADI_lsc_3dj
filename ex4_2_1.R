@@ -137,7 +137,7 @@ nn_accuracy_func <- function(column, train_data, test_data, nodes) {
   
   nn.pred <- compute(nn.model, test_data[, -which(names(test_data) == column)])
   
-  predicted_labels <- ifelse(nn.pred$net.result > 0.5, 1, 0)  # Convert probabilities to class labels
+  predicted_labels <- ifelse(nn.pred$net.result > 0.5, 1, 0)
   
   accuracy <- sum(predicted_labels == test_data[[column]]) / length(predicted_labels) * 100
   
@@ -150,8 +150,8 @@ nn_accuracy_func <- function(column, train_data, test_data, nodes) {
 }
 
 normalize <- function(data) {
-  centered <- scale(data, center = TRUE, scale = FALSE)  # Center the data
-  normalized <- scale(centered, center = FALSE, scale = TRUE)  # Scale the data
+  centered <- scale(data, center = TRUE, scale = FALSE)
+  normalized <- scale(centered, center = FALSE, scale = TRUE)
   return(normalized)
 }
 
@@ -170,23 +170,15 @@ norm_test_labels <- normalized_dataset[-sample,column_name]
 knn_info_norm <- knn_func(dataset, column_name, norm_train_data_knn, norm_test_data_knn, norm_train_labels, norm_test_labels)
 
 
-normalized_dataset <- as.data.frame(lapply(dataset, min_max_normalize))
-
-sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
-norm_train_data  <- normalized_dataset[sample, ]
-norm_test_data  <- normalized_dataset[!sample, ]
-
-
-nodes <- 5
-nn_accuracy_norm <- nn_accuracy_func(column_name, norm_train_data, norm_test_data, nodes)
-
-normalized_dataset <- as.data.frame(lapply(dataset, min_max_normalize))
-
 sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
 norm_train_data  <- normalized_dataset[sample, ]
 norm_test_data  <- normalized_dataset[!sample, ]
 
 tree_accuracy_norm <- tree_accuracy_funct(column_name, norm_train_data, norm_test_data)
+  
+nodes <- 3
+nn_accuracy_norm <- nn_accuracy_func(column_name, norm_train_data, norm_test_data, nodes)
+
 tree_accuracy_norm
 nn_accuracy_norm
 knn_info_norm
