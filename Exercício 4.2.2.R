@@ -8,6 +8,13 @@ calculate_accuracy <- function(predictions, actual_values) {
 }
 
 # Árvore de decisão
+
+# Verificação dos dados antes da normalização
+summary(dataset$Winter.Training.Camp)
+
+# Após normalização - valores iguais -> não se normaliza 
+summary(normalized_dataset$Winter.Training.Camp)
+
 sample = sample(1:nrow(dataset), 0.7 * nrow(dataset))
 winterTrainingCamp.train = dataset[sample,]
 winterTrainingCamp.test = dataset[-sample,]
@@ -19,14 +26,13 @@ tree.model = rpart(Winter.Training.Camp ~ . , data = winterTrainingCamp.train, m
 library(rattle)
 fancyRpartPlot(tree.model)
 
-# Fazendo previsões no conjunto de teste
+# Previsões no conjunto de teste
 tree.pred = predict(tree.model, winterTrainingCamp.test, type = 'class')
 
 # Matriz de confusão - Avaliação do desempenho do modelo
 m.conf <- table(winterTrainingCamp.test$Winter.Training.Camp, tree.pred)
 acc <- 100 * round((m.conf[1, 1] + m.conf[2, 2]) / sum(m.conf), 4)
 cat("Accuracy: ", acc, "%") # 69.33 %
-parse_results(m.conf);
 
 plot(tree.pred)
 
@@ -88,7 +94,7 @@ nn.model <- neuralnet(Winter.Training.Camp ~ ., data = data.train, hidden = numn
 plot(nn.model)
 
 # Performance do modelo
-nn.pred <- compute(nn.model, data.test[,-24])
+nn.pred <- compute(nn.model, data.test[,-24]) # 24: número da coluna Winter.Training.Camp 
 calculate_accuracy(nn.pred$net.result, data.test$Winter.Training.Camp)
 
 # Accuracy = 63.33 %
@@ -149,6 +155,13 @@ table(folds)
 # Matriz com nrFolds linhas e 2 colunas (2 modelos)
 cv.error <- matrix(nrow = k, ncol = 2)
 
+conf_matrix_tree_cumulative <- matrix(0, nrow = 2, ncol = 2)
+conf_matrix_nn_cumulative <- matrix(0, nrow = 2, ncol = 2)
+
+# Listas para armazenar as taxas de acerto
+tree_accuracy_list <- c() 
+nn_accuracy_list <- c() 
+
 for (i in 1:k) {
   # Divisão da amostra
   tree_train.cv <- dataset[folds != i, ]
@@ -158,37 +171,44 @@ for (i in 1:k) {
   test.cv <- normalized_dataset[folds == i, ]
   
   # Árvore de decisão
-  rpart.model <- rpart(Winter.Training.Camp ~ . , data = tree_train.cv)
-  rpart.pred <- predict(rpart.model, newdata = tree_test.cv)
-  #rpart.pred <- minmaxdesnorm(rpart.pred, dataset$Winter.Training.Camp)
+  rpart.model <- rpart(Winter.Training.Camp ~ . , data = tree_train.cv, method = "class")
+  rpart.pred <- predict(rpart.model, tree_test.cv , type = 'class')
+  
+  # Matriz de confusão
+  conf_matrix_tree <- table(tree_test.cv$Winter.Training.Camp, rpart.pred)
+  conf_matrix_tree_cumulative <- conf_matrix_tree_cumulative + conf_matrix_tree
+  
+  # Cálculo da taxa de acerto
+  tree_accuracy <- sum(diag(conf_matrix_tree)) / sum(conf_matrix_tree)
+  tree_accuracy_list <- c(tree_accuracy_list, tree_accuracy) # Armazenar a taxa de acerto numa lista
+  
+  ###########################################
   
   # Rede neuronal
   nn.model <- neuralnet(Winter.Training.Camp ~ ., data = train.cv, hidden = numnodes, stepmax = 1e6)
-  
   nnet.pred <- compute(nn.model, test.cv[, -24])
+  
+  # Matriz de confusão
+  predicted_classes <- ifelse(nnet.pred$net.result > 0.5, 1, 0) 
+  conf_matrix_nn <- table(predicted_classes, test.cv$Winter.Training.Camp)
+  conf_matrix_nn_cumulative <- conf_matrix_nn_cumulative + conf_matrix_nn
+
+  # Cálculo da taxa de acerto
+  nn_accuracy <- sum(diag(conf_matrix_nn)) / sum(conf_matrix_nn)
+  nn_accuracy_list <- c(nn_accuracy_list, nn_accuracy)
   
   # Desnormalização
   nnet.pred <- minmaxdesnorm(nnet.pred$net.result, dataset$Winter.Training.Camp)
   test.cv$Winter.Training.Camp <- minmaxdesnorm(test.cv$Winter.Training.Camp, dataset$Winter.Training.Camp)
-  
-  cv.error[i,] <- c(
-    RMSE(rpart.pred, test.cv$Winter.Training.Camp),
-    RMSE(nnet.pred, test.cv$Winter.Training.Camp)
-  )
 }
 
-cv.error
+# Cálculo da média e do desvio padrão da árvore de decisão
+tree_mean_accuracy <- mean(tree_accuracy_list) # 0.6890901
+tree_sd_accuracy <- sd(tree_accuracy_list) # 0.02791196
 
-# Média 
-apply(cv.error, 2, mean) 
-# Árvore de decisão = 0.4615854 
-# Rede neuronal = 0.4352531
-
-# Desvio padrão
-apply(cv.error, 2, sd)
-# Árvore de decisão = 0.01346129
-# Rede neuronal = 0.02536660
-
+# Cálculo da média e do desvio padrão da rede neuronal
+nn_mean_accuracy <- mean(nn_accuracy_list) # 0.7114371
+nn_sd_accuracy <- sd(nn_accuracy_list) # 0.04545551
 
 #B)
 
@@ -196,8 +216,8 @@ apply(cv.error, 2, sd)
 # H1: os modelos são significativamente diferentes
 
 # Teste Paramétrico
-t.test(cv.error[, 1], cv.error[, 2]) # p-value = 1.016e-07
-
+t.test(tree_accuracy_list, nn_accuracy_list) # p-value = 0.2051
+# Como p-value > alfa (0.05) não se rejeita a hipótese nula
 
 #C)
 
@@ -206,20 +226,30 @@ t.test(cv.error[, 1], cv.error[, 2]) # p-value = 1.016e-07
 parse_results <- function(m.conf) {
   accuracy <- 100 * round((m.conf[1, 1] + m.conf[2, 2]) / sum(m.conf), 4)
   recall = m.conf[1, 1] / (m.conf[1, 1] + m.conf[1, 2])
-  precision = m.conf[1, 1] / (m.conf[1, 1] + m.conf[2, 1])
-  f1 = (2 * precision * recall) / (precision + recall)
+  specificity <- m.conf[2, 2] / (m.conf[2, 2] + m.conf[2, 1])
+  f1 <- (2 * recall * specificity) / (recall + specificity)
   
   message("accuracy: ", accuracy, "%")
-  message("Recall: ", recall)
-  message("precision: ", precision)
+  message("sensitivity: ", recall)
+  message("specificity: ", specificity)
   message("F1: ", f1)
   
   my_list <-
     list(
       "F1" = f1,
-      "precision" = precision,
+      "specificity" = specificity,
       "recall/sensitivity" = recall,
       "accuracy" = accuracy
     )
   return(my_list)
-}
+}         
+
+# Desempenho da árvore de decisão
+tree_results <- parse_results(conf_matrix_tree_cumulative)
+message("Decision Tree Perfomance:")
+print(tree_results)
+
+# Desempenho da rede neuronal
+nn_results <- parse_results(conf_matrix_nn_cumulative)
+cat("Neural Network Perfomance:")
+print(nn_results)
