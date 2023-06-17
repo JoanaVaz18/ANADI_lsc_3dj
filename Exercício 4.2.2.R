@@ -36,9 +36,9 @@ cat("Accuracy: ", acc, "%") # 69.33 %
 
 plot(tree.pred)
 
-
 # Rede neuronal
 
+# Separação do dataset em dois subconjuntos (70% treino/30% teste)
 index <- sample(1:nrow(normalized_dataset), 0.7 * nrow(normalized_dataset))
 
 data.train <- normalized_dataset[index,]
@@ -48,29 +48,6 @@ print('treino: ')
 summary(data.train$Winter.Training.Camp)
 print('teste: ')
 summary(data.test$Winter.Training.Camp)
-
-#-------------------------------
-# 1 internal node
-numnodes <- 1
-
-#nn.model <-
-#  neuralnet(
-#    Winter.Training.Camp ~ BackgroundCobblestones + BackgroundHill + BackgroundMountain + BackgroundNone + BackgroundSprinter + BackgroundTime.Trial + ContinentAfrica + 
-#      ContinentAsia + ContinentAustralia + ContinentEurope + ContinentNorth.America + ContinentSouth.America + Teamgroup.A + Teamgroup.B + Teamgroup.C + Teamgroup.D +
-#      Teamgroup.E + vo2_results + hr_results + altitude_results + Age + Pro.level + gender,
-#    data = data.train,
-#    hidden = numnodes, 
-#    stepmax = 1e7
-#  )
-
-nn.model <- neuralnet(Winter.Training.Camp ~ ., data = data.train, hidden = numnodes, stepmax = 1e6 )
-plot(nn.model)
-
-# Performance do modelo
-nn.pred <- compute(nn.model, data.test[,-24])
-calculate_accuracy(nn.pred$net.result, data.test$Winter.Training.Camp)
-
-# Accuracy = 74.67 %
 
 #-------------------------------
 # 2 internal nodes
@@ -84,7 +61,7 @@ nn.pred <- compute(nn.model, data.test[,-24])
 #nn.pred <- compute(nn.model, data.test)
 calculate_accuracy(nn.pred$net.result, data.test$Winter.Training.Camp)
 
-# Accuracy = 72 %
+# Accuracy = 70.33 %
 
 #-------------------------------
 # 2 internal levels: 6,2 nodes
@@ -97,30 +74,20 @@ plot(nn.model)
 nn.pred <- compute(nn.model, data.test[,-24]) # 24: número da coluna Winter.Training.Camp 
 calculate_accuracy(nn.pred$net.result, data.test$Winter.Training.Camp)
 
-# Accuracy = 63.33 %
+# Accuracy = 65 %
 
-#############################################
-# Cálculo da accuracy
+#-------------------------------
+# 1 internal node
+numnodes <- 1
 
-# Extração dos valores previstos
-predictions <- nn.pred$net.result
-predicted_classes <- ifelse(predictions > 0.5, 1, 0)  # Assuming binary classification with threshold 0.5
+nn.model <- neuralnet(Winter.Training.Camp ~ ., data = data.train, hidden = numnodes, stepmax = 1e6 )
+plot(nn.model)
 
-# Extração dos actual values
-actual_values <- data.test$Winter.Training.Camp
+# Performance do modelo
+nn.pred <- compute(nn.model, data.test[,-24])
+calculate_accuracy(nn.pred$net.result, data.test$Winter.Training.Camp)
 
-# Matriz de confusão
-cfmatrix <- table(predicted_classes, actual_values)
-nn_accuracy <- sum(diag(cfmatrix)) / sum(cfmatrix) * 100
-
-# Avaliação do desempenho do modelo
-parse_results(cfmatrix)
-
-# Cálculo da accuracy
-accuracy <- sum(predicted_classes == actual_values) / length(actual_values)
-accuracy
-
-############################################
+# Accuracy = 72.33 %
 
 # Desnormalização
 nn.pred.winterTrainingCamp <- minmaxdesnorm(nn.pred$net.result, dataset$Winter.Training.Camp)
@@ -130,12 +97,8 @@ RMSE <- function(test, predicted) {
   sqrt(mean((test - predicted) ^ 2))
 }
 
+# Cálculo do RMSE 
 RMSE(nn.pred.winterTrainingCamp, test.winterTrainingCamp) # 0.4147293
-
-# Matriz de confusão - Avaliação do desempenho do modelo
-#cfmatrix <- table(nn.pred.winterTrainingCamp, test.winterTrainingCamp)
-#nn_accuracy <- sum(diag(cfmatrix)) / sum(cfmatrix) * 100 # 33.3%
-#parse_results(cfmatrix);
 
 #A)
 # K-folds
@@ -146,15 +109,13 @@ k <- 10
 # Gera array com o número de folds para cada amostra
 folds <- sample(1:k, nrow(normalized_dataset), replace = TRUE)
 
-# Modelo apresenta melhor accuracy com 1 nó
-numnodes = 1
-
 # Tamanho de cada fold
 table(folds)
 
-# Matriz com nrFolds linhas e 2 colunas (2 modelos)
-cv.error <- matrix(nrow = k, ncol = 2)
+# Modelo apresenta melhor accuracy com 1 nó
+numnodes = 1
 
+# Matrizes para armazenar os resultados das matrizes de confusão
 conf_matrix_tree_cumulative <- matrix(0, nrow = 2, ncol = 2)
 conf_matrix_nn_cumulative <- matrix(0, nrow = 2, ncol = 2)
 
@@ -192,7 +153,7 @@ for (i in 1:k) {
   predicted_classes <- ifelse(nnet.pred$net.result > 0.5, 1, 0) 
   conf_matrix_nn <- table(predicted_classes, test.cv$Winter.Training.Camp)
   conf_matrix_nn_cumulative <- conf_matrix_nn_cumulative + conf_matrix_nn
-
+  
   # Cálculo da taxa de acerto
   nn_accuracy <- sum(diag(conf_matrix_nn)) / sum(conf_matrix_nn)
   nn_accuracy_list <- c(nn_accuracy_list, nn_accuracy)
@@ -204,7 +165,7 @@ for (i in 1:k) {
 
 # Cálculo da média e do desvio padrão da árvore de decisão
 tree_mean_accuracy <- mean(tree_accuracy_list) # 0.6890901
-tree_sd_accuracy <- sd(tree_accuracy_list) # 0.02791196
+tree_sd_accuracy <- sd(tree_accuracy_list) # 0.04483996
 
 # Cálculo da média e do desvio padrão da rede neuronal
 nn_mean_accuracy <- mean(nn_accuracy_list) # 0.7114371
@@ -222,7 +183,7 @@ t.test(tree_accuracy_list, nn_accuracy_list) # p-value = 0.2051
 #C)
 
 # Função para as medidas de avaliação: taxa de acerto (accuracy), 
-# recall/sensitivity, precision e F1 
+# recall/sensitivity, specificity e F1 
 parse_results <- function(m.conf) {
   accuracy <- 100 * round((m.conf[1, 1] + m.conf[2, 2]) / sum(m.conf), 4)
   recall = m.conf[1, 1] / (m.conf[1, 1] + m.conf[1, 2])
@@ -248,8 +209,16 @@ parse_results <- function(m.conf) {
 tree_results <- parse_results(conf_matrix_tree_cumulative)
 message("Decision Tree Perfomance:")
 print(tree_results)
+# F1 = 0.479943
+# specificity = 0.8972393
+# recall/sensitivity = 0.3275862
+# accuracy = 69.9 %
 
 # Desempenho da rede neuronal
 nn_results <- parse_results(conf_matrix_nn_cumulative)
 cat("Neural Network Perfomance:")
 print(nn_results)
+# F1 = 0.6940992
+# specificity = 0.7434896
+# recall/sensitivity` = 0.6508621
+# accuracy = 72.2 %
