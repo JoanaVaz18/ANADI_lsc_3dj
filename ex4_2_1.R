@@ -85,6 +85,24 @@ RMSE <- function(test, predicted) {
 
 #4.2
 
+# Função para as medidas de avaliação: taxa de acerto (accuracy), 
+# recall/sensitivity, precision e F1 
+parse_results <- function(m.conf) {
+  accuracy <- 100 * round((m.conf[1, 1] + m.conf[2, 2]) / sum(m.conf), 4)
+  recall = m.conf[1, 1] / (m.conf[1, 1] + m.conf[1, 2])
+  precision = m.conf[1, 1] / (m.conf[1, 1] + m.conf[2, 1])
+  f1 = (2 * precision * recall) / (precision + recall)
+
+  
+  my_list <-
+    list(
+      "F1" = f1,
+      "precision" = precision,
+      "recall/sensitivity" = recall,
+      "accuracy" = accuracy
+    )
+  return(my_list)
+}
 
 tree_accuracy_funct <- function(column_name, train_data, test_data) {
   decision_tree <- rpart(paste(column_name, "~ ."), data = train_data, method = "class")
@@ -94,42 +112,29 @@ tree_accuracy_funct <- function(column_name, train_data, test_data) {
 }
 
 knn_info_func <- function(dataset, column_name, data.train, data.test, train_labels, test_labels) {
-  k <- c()
-  rmse <- c()
-  for (i in seq(1, 50, 2)) {
+  k_values <- seq(1, 50, 2)
+  rmse <- numeric()
+  accuracy <- numeric()
+  
+  for (i in k_values) {
     knnreg.pred <- knn.reg(data.train, data.test, train_labels, k = i)
-    
     knnreg.pred$pred <- minmaxdesnorm(knnreg.pred$pred, dataset[[column_name]])
+    rmse <- c(rmse, RMSE(knnreg.pred$pred, minmaxdesnorm(test_labels, dataset[[column_name]])))
     
-    rmse <-
-      c(rmse, RMSE(knnreg.pred$pred,
-                   minmaxdesnorm(test_labels, dataset[[column_name]])))
-    
-    k <- c(k, i)
-  }
-  resNeigh <- data.frame(k, rmse)
-  min_rmse <- resNeigh[resNeigh$rmse == min(resNeigh$rmse), ]
-  
-  k <- c()
-  accuracy <- c()
-  for (i in seq(1, 50, 2)){   
-    
-    knn.pred <- knn(train=data.train, test=data.test, cl=train_labels, k=i) 
-    
-    cfmatrix <- table(test_labels,knn.pred)
-    
-    accuracy <- c(accuracy, sum(diag(cfmatrix))/sum(cfmatrix))
-    
-    
-    k <- c(k,i)
+    knn.pred <- knn(train = data.train, test = data.test, cl = train_labels, k = i)
+    cfmatrix <- table(test_labels, knn.pred)
+    accuracy <- c(accuracy, sum(diag(cfmatrix)) / sum(cfmatrix))
   }
   
-  resNeigh<-data.frame(k,accuracy)
-  max_acc <- resNeigh[resNeigh$accuracy==max(resNeigh$accuracy), ] 
-  k_max <- k[which.max(accuracy)]
+  res_rmse <- data.frame(k = k_values, rmse)
+  min_rmse <- res_rmse[res_rmse$rmse == min(res_rmse$rmse), ]
   
-  return(list(accuracy = max_acc, rmse = min_rmse))
+  res_accuracy <- data.frame(k = k_values, accuracy)
+  max_accuracy <- res_accuracy[res_accuracy$accuracy == max(res_accuracy$accuracy), ]
+  
+  return(list(accuracy = max_accuracy, rmse = min_rmse))
 }
+
 
 nn_info_func <- function(column, train_data, test_data, nodes) {
   formula <- as.formula(paste(column, "~ ."))
@@ -173,6 +178,7 @@ knn_info_norm <- knn_info_func(dataset, column_name, norm_train_data_knn, norm_t
 knn_info_norm 
 # k=35 max accuracy: 68.0 % 
 # k=47 min rmse: 0.4674
+k <- knn_info_norm$accuracy$k
 
 sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
 norm_train_data  <- normalized_dataset[sample, ]
@@ -180,16 +186,16 @@ norm_test_data  <- normalized_dataset[!sample, ]
 
 tree_accuracy_norm <- tree_accuracy_funct(column_name, norm_train_data, norm_test_data)
 tree_accuracy_norm 
-# accuracy: 70.74 %
+# accuracy: 70.73955 %
 
 
-results <- c()
+nn_results <- c()
 internal_nodes <- list(1,2,c(6,2))
 for (n in internal_nodes) {
   nn_info <- nn_info_func(column_name, norm_train_data, norm_test_data, n)
-  results <- c(results, list(nodes=n,nn_info))
+  nn_results <- c(nn_results, list(nodes=n,nn_info))
 }
-results
+nn_results
 
 # nodes = 1
 # accuracy: 71.06109
@@ -204,7 +210,101 @@ results
 # rmse: 0.5623287
 
 
+#A
+
+# Melhores modelos
+# Arvore Decisão accuracy: 70.74 %
+# Rede Neuronal (nodes=1) accuracy: 71.06 %
+numnodes <- 1
+cvf <- 10
+folds <- sample(1:cvf, nrow(dataset), replace = TRUE)
+
+#Fold size
+table(folds)
+
+accuracy <- matrix(nrow = cvf, ncol = 2)
+metrics <- matrix(nrow = cvf, ncol = 8)
+
+for (i in 1:cvf) {
+  # Divisão da amostra
+  train.cv <- normalized_dataset[folds != i, ]
+  test.cv <- normalized_dataset[folds == i, ]
+  
+  # Árvore de decisão
+  rpart.model <- rpart(Pro.level ~ ., method="class" , data = train.cv)
+  rpart.pred <- predict(rpart.model, test.cv, type = "class")
+  cfmattree <- table(test.cv$Pro.level,rpart.pred)
+  
+  # Rede neuronal
+  nn.model <- neuralnet(Pro.level ~ ., data = train.cv, hidden = numnodes ,stepmax = 1e6 )
+  nn.pred <- compute(nn.model, test.cv[, -which(names(normalized_dataset) == column_name)])
+  predicted_labels <- ifelse(nn.pred$net.result > 0.5, 1, 0)  
+  cfmatnn <- table(predicted_labels, test.cv$Pro.level)
+  
+  accuracy[i, ] <- c( sum(diag(cfmattree))/sum(cfmattree)*100,
+                      sum(diag(cfmatnn))/sum(cfmatnn)*100) 
+  
+  tree_results <-  parse_results(cfmattree)
+  nn_results <- parse_results(cfmatnn)
+  
+  metrics[i, ] <- c(tree_results$accuracy,tree_results$`recall/sensitivity`,tree_results$precision,tree_results$F1,nn_results$accuracy,nn_results$`recall/sensitivity`,nn_results$precision,nn_results$F1)
+  
+}
 
 
+
+# Média Accuracy
+apply(accuracy, 2, mean) 
+# Árvore de decisão = 68.72911    
+# Rede neuronal = 69.43564
+
+# Desvio padrão
+apply(accuracy, 2, sd)
+# Árvore de decisão = 3.153826  
+# Rede neuronal = 6.000584
+
+# O modelo Rede Neuronal tem uma precisão ligeiramente
+# superior ao modelo Árvore Decisão
+# Os dados da Árvore decisão são mais consistentes e
+# variam menos que os da Rede neuronal
+
+
+
+#C
+# H0: os modelos são significativamente iguais 
+# H1: os modelos são significativamente diferentes
+model_test <- t.test(accuracy[, 1], accuracy[, 2])
+p_value <- model_test$p.value
+alpha <- 0.05
+
+
+if (p_value <= alpha) {
+  hypothesis_result <- glue("Como o p_value < alpha, rejeitamos a hipótese nula. Ou seja, os modelos são significativamente diferentes")
+} else {
+  hypothesis_result <- glue("Como o p_value > alpha, não rejeitamos a hipótese nula. Ou seja, os modelos são significativamente iguais")
+}
+
+p_value
+hypothesis_result
+
+
+#D)
+
+# resultados resultantes do ex do k fold
+medidas <- matrix(nrow = 2, ncol = 4)
+
+medidas[1,1] <- mean(metrics[,1])
+medidas[1,2] <- mean(metrics[,2])
+medidas[1,3] <- mean(metrics[,3])
+medidas[1,4] <- mean(metrics[,4])
+medidas[2,1] <- mean(metrics[,5])
+medidas[2,2] <- mean(metrics[,6])
+medidas[2,3] <- mean(metrics[,7])
+medidas[2,4] <- mean(metrics[,8])
+
+rownames(medidas) <- c("TREE", "NN")
+colnames(medidas) <- c("Accuracy", "Sensitivity", "Precision", "F1")
+
+View(medidas)
 
 
