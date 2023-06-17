@@ -93,7 +93,7 @@ tree_accuracy_funct <- function(column_name, train_data, test_data) {
   return(sum(diag(cfmatrix)) / sum(cfmatrix) * 100) 
 }
 
-knn_func <- function(dataset, column_name, data.train, data.test, train_labels, test_labels) {
+knn_info_func <- function(dataset, column_name, data.train, data.test, train_labels, test_labels) {
   k <- c()
   rmse <- c()
   for (i in seq(1, 50, 2)) {
@@ -131,7 +131,7 @@ knn_func <- function(dataset, column_name, data.train, data.test, train_labels, 
   return(list(accuracy = max_acc, rmse = min_rmse))
 }
 
-nn_accuracy_func <- function(column, train_data, test_data, nodes) {
+nn_info_func <- function(column, train_data, test_data, nodes) {
   formula <- as.formula(paste(column, "~ ."))
   nn.model <- neuralnet(formula, data = train_data, hidden = nodes, stepmax = 1e6)
   
@@ -145,7 +145,7 @@ nn_accuracy_func <- function(column, train_data, test_data, nodes) {
   denormalized_actual <- minmaxdesnorm(test_data[, column], train_data[, column])
   
   rmse <- RMSE(denormalized_pred, denormalized_actual)
-
+  
   return(list(accuracy = accuracy, rmse = rmse))
 }
 
@@ -157,6 +157,8 @@ normalize <- function(data) {
 
 set.seed(42)
 
+normalized_dataset <- as.data.frame(lapply(dataset, min_max_normalize))
+
 column_name <- "Pro.level"
 
 sample <- sample(1:nrow(normalized_dataset), 0.7 * nrow(normalized_dataset))
@@ -167,18 +169,42 @@ norm_test_data_knn  <- normalized_dataset[-sample, -which(names(normalized_datas
 norm_train_labels <- normalized_dataset[sample,column_name]
 norm_test_labels <- normalized_dataset[-sample,column_name]
 
-knn_info_norm <- knn_func(dataset, column_name, norm_train_data_knn, norm_test_data_knn, norm_train_labels, norm_test_labels)
-
+knn_info_norm <- knn_info_func(dataset, column_name, norm_train_data_knn, norm_test_data_knn, norm_train_labels, norm_test_labels)
+knn_info_norm 
+# k=35 max accuracy: 68.0 % 
+# k=47 min rmse: 0.4674
 
 sample <- sample(c(TRUE, FALSE), nrow(normalized_dataset), replace=TRUE, prob=c(0.7,0.3))
 norm_train_data  <- normalized_dataset[sample, ]
 norm_test_data  <- normalized_dataset[!sample, ]
 
 tree_accuracy_norm <- tree_accuracy_funct(column_name, norm_train_data, norm_test_data)
-  
-nodes <- 3
-nn_accuracy_norm <- nn_accuracy_func(column_name, norm_train_data, norm_test_data, nodes)
+tree_accuracy_norm 
+# accuracy: 70.74 %
 
-tree_accuracy_norm
-nn_accuracy_norm
-knn_info_norm
+
+results <- c()
+internal_nodes <- list(1,2,c(6,2))
+for (n in internal_nodes) {
+  nn_info <- nn_info_func(column_name, norm_train_data, norm_test_data, n)
+  results <- c(results, list(nodes=n,nn_info))
+}
+results
+
+# nodes = 1
+# accuracy: 71.06109
+# rmse: 0.4506036
+
+# nodes = 2
+# accuracy: 67.52412
+# rmse: 0.4854399
+
+# levels = 2 (nodes = 6,2)
+# accuracy: 60.45016
+# rmse: 0.5623287
+
+
+
+
+
+
