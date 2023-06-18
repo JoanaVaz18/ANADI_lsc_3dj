@@ -271,20 +271,21 @@ apply(accuracy, 2, sd)
 
 
 #C
-# H0: os modelos são significativamente iguais 
-# H1: os modelos são significativamente diferentes
+# H0: os modelos têm desempenhos iguais 
+# H1: os modelos têm desempenhos diferentes
 model_test <- t.test(accuracy[, 1], accuracy[, 2])
 p_value <- model_test$p.value
 alpha <- 0.05
 
 
 if (p_value <= alpha) {
-  hypothesis_result <- glue("Como o p_value < alpha, rejeitamos a hipótese nula. Ou seja, os modelos são significativamente diferentes")
+  hypothesis_result <- ("Como o p_value < alpha, rejeitamos a hipótese nula. Ou seja, os modelos têm desempenhos significativamente diferentes")
 } else {
-  hypothesis_result <- glue("Como o p_value > alpha, não rejeitamos a hipótese nula. Ou seja, os modelos são significativamente iguais")
+  hypothesis_result <- ("Como o p_value > alpha, não rejeitamos a hipótese nula. Ou seja, os modelos têm desempenhos significativamente iguais")
 }
 
-p_value
+p_value 
+# 0.72
 hypothesis_result
 
 
@@ -303,8 +304,9 @@ medidas[2,3] <- mean(metrics[,7])
 medidas[2,4] <- mean(metrics[,8])
 
 rownames(medidas) <- c("TREE", "NN")
-colnames(medidas) <- c("Accuracy", "Sensitivity", "Precision", "F1")
-
-View(medidas)
-
+colnames(medidas) <- c("Accuracy", "Sensitivity", "Specificity", "F1 Score")
+medidas
+# model Accuracy Sensitivity Specificity  F1 Score
+# TREE   68.729   0.2635353   0.6203208 0.3584464
+# NN     69.528   0.5887801   0.4022311 0.4747894
 
